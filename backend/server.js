@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const Fastify = require('fastify');
 const cors = require('@fastify/cors');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const OpenAI = require('openai');
 
 const fastify = Fastify({ logger: true });
@@ -12,16 +12,16 @@ fastify.register(cors, {
 });
 
 // SQLite Database
-const db = new sqlite3.Database('./movies.db');
+const db = new Database('movies.db');
 
-db.run(`
+db.prepare(`
   CREATE TABLE IF NOT EXISTS recommendations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_input TEXT,
     recommended_movies TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )
-`);
+`).run();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -51,12 +51,10 @@ fastify.post('/recommend', async (request, reply) => {
     const movies = responseText.split(',').map(movie => movie.trim());
 
     // Save to database
-    db.run(
-      `INSERT INTO recommendations (user_input, recommended_movies)
-       VALUES (?, ?)`,
-      [preference, JSON.stringify(movies)]
-    );
-
+    db.prepare(
+  `INSERT INTO recommendations (user_input, recommended_movies)
+   VALUES (?, ?)`
+).run(preference, JSON.stringify(movies));
     reply.send({ movies });
 
   } catch (error) {
