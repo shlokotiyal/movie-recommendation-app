@@ -1,0 +1,79 @@
+require('dotenv').config();
+
+const Fastify = require('fastify');
+const cors = require('@fastify/cors');
+const sqlite3 = require('sqlite3').verbose();
+const OpenAI = require('openai');
+
+const fastify = Fastify({ logger: true });
+
+fastify.register(cors, {
+  origin: '*'
+});
+
+// SQLite Database
+const db = new sqlite3.Database('./movies.db');
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_input TEXT,
+    recommended_movies TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// API Route
+fastify.post('/recommend', async (request, reply) => {
+  try {
+    const { preference } = request.body;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a movie recommendation assistant.'
+        },
+        {
+          role: 'user',
+          content: `Recommend 5 movies for: ${preference}. Return only movie names separated by commas.`
+        }
+      ]
+    });
+
+    const responseText = completion.choices[0].message.content;
+
+    const movies = responseText.split(',').map(movie => movie.trim());
+
+    // Save to database
+    db.run(
+      `INSERT INTO recommendations (user_input, recommended_movies)
+       VALUES (?, ?)`,
+      [preference, JSON.stringify(movies)]
+    );
+
+    reply.send({ movies });
+
+  } catch (error) {
+    console.error(error);
+    reply.status(500).send({ error: 'Something went wrong' });
+  }
+});
+
+// Start server
+const start = async () => {
+  try {
+    await fastify.listen({ port: 5000 });
+    console.log('Server running on port 5000');
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();
