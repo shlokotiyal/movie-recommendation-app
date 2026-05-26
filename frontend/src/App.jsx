@@ -14,7 +14,7 @@ function App() {
 
     try {
       const response = await axios.post(
-        'http://localhost:5000/recommend',
+        'https://movie-recommendation-app-d2r8.onrender.com/recommend',
         { preference }
       );
 
